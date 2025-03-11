@@ -109,12 +109,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         <p className="text-lg text-pink-800">{result.cta}</p>
       </div>
 
-      {/* Confirmação de sucesso */}
-      {submitted && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
-          Resultados enviados com sucesso!
-        </div>
-      )}
+
 
       <div className="space-y-4">
         <a
