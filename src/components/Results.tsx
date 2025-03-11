@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Result, UserInfo } from '../types';
 import { Heart, Star, Sparkles } from 'lucide-react';
-import axios from 'axios';
 
 interface ResultsProps {
   result: Result;
@@ -19,122 +18,66 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const Icon = icons[result.type];
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-
-  // Função para enviar os dados através do proxy
-  const sendResultsToWebhook = async () => {
-    if (isSubmitting) return;
-    
-    setIsSubmitting(true);
-    setError(null);
-    
+  const [showIframe, setShowIframe] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  
+  // Função para enviar os dados via GET query params
+  const sendViaGetRequest = () => {
     try {
-      // Preparando os dados
-      const payload = {
-        name: userInfo.name,
-        email: userInfo.email,
-        result: {
-          type: result.type,
-          title: result.title,
-          description: result.description
-        }
+      setIsSubmitting(true);
+      
+      // Construa as query params para o GET request
+      const params = new URLSearchParams();
+      params.append('name', userInfo.name);
+      params.append('email', userInfo.email);
+      params.append('resultType', result.type);
+      params.append('resultTitle', result.title);
+      params.append('resultDescription', result.description);
+      
+      // Construa a URL completa
+      const webhookUrl = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`;
+      
+      // Crie um elemento <img> invisível para fazer a requisição GET
+      const img = document.createElement('img');
+      img.style.display = 'none';
+      img.src = webhookUrl;
+      
+      // Quando a imagem carregar ou falhar, consideramos enviado
+      img.onload = img.onerror = () => {
+        setSubmitted(true);
+        setIsSubmitting(false);
+        document.body.removeChild(img);
       };
       
-      console.log("Payload para envio:", payload);
-      
-      // Se estiver rodando no Railway, use a URL relativa para o proxy
-      // Nota: ajuste a URL abaixo conforme a configuração do seu servidor proxy
-      const proxyUrl = '/api/webhook';
-      
-      console.log(`Enviando para o proxy: ${proxyUrl}`);
-      
-      // Envio através do proxy
-      const response = await axios.post(proxyUrl, payload, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log("Resposta do proxy:", response.data);
-      
-      // Guardar informações de debug
-      setDebugInfo({
-        sentPayload: payload,
-        receivedResponse: response.data
-      });
-      
-      setSubmitted(true);
-    } catch (error: any) {
-      console.error("Erro ao enviar para o proxy:", error);
-      
-      // Informações detalhadas do erro para debug
-      const errorDetails = {
-        message: error.message
-      };
-      
-      if (error.response) {
-        errorDetails.status = error.response.status;
-        errorDetails.data = error.response.data;
+      document.body.appendChild(img);
+    } catch (error) {
+      console.error("Erro no envio via GET:", error);
+      setIsSubmitting(false);
+    }
+  };
+
+  // Função para mostrar o iframe que fará o envio via formulário
+  const showIframeForm = () => {
+    setShowIframe(true);
+  };
+
+  // Função para enviar via formulário oculto que abre em nova aba
+  const submitFormInNewTab = () => {
+    try {
+      if (formRef.current) {
+        formRef.current.submit();
+        setSubmitted(true);
       }
-      
-      console.error("Detalhes do erro:", errorDetails);
-      setDebugInfo(errorDetails);
-      
-      // Mensagem amigável para o usuário
-      setError(`Erro ao enviar resultados. Por favor, tente novamente.`);
-    } finally {
-      setIsSubmitting(false);
+    } catch (error) {
+      console.error("Erro ao submeter formulário:", error);
     }
   };
 
-  // Função para envio alternativo direto (sem proxy)
-  const sendDirectToWebhook = async () => {
-    if (isSubmitting) return;
-    
-    setIsSubmitting(true);
-    setError(null);
-    
-    try {
-      const payload = {
-        name: userInfo.name,
-        email: userInfo.email,
-        result: {
-          type: result.type,
-          title: result.title,
-          description: result.description
-        }
-      };
-      
-      console.log("Tentando envio direto para o webhook...");
-      
-      const response = await axios.post(
-        'https://webhook.site/ec3d02de-4f8f-412a-a5c4-1fa6b5b71425', 
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        }
-      );
-      
-      console.log("Resposta do envio direto:", response);
-      setSubmitted(true);
-    } catch (error: any) {
-      console.error("Erro no envio direto:", error);
-      // Se falhar o envio direto, mostrar o erro mas não atualizar o estado de erro na interface
-      // para não confundir o usuário
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Enviar os dados quando o componente montar
+  // Tenta enviar automaticamente
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!submitted) {
-        sendResultsToWebhook();
+        sendViaGetRequest(); // Tenta primeiro o método GET
       }
     }, 1000);
     
@@ -158,50 +101,75 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         <p className="text-lg text-pink-800">{result.cta}</p>
       </div>
 
-      {/* Mostrar erros se houver */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error} 
-          <div className="mt-2 flex space-x-2">
-            <button 
-              onClick={() => sendResultsToWebhook()}
-              disabled={isSubmitting}
-              className="px-3 py-1 bg-red-100 rounded"
-            >
-              Tentar via proxy
-            </button>
-            <button 
-              onClick={() => sendDirectToWebhook()}
-              disabled={isSubmitting}
-              className="px-3 py-1 bg-red-100 rounded"
-            >
-              Tentar direto
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Mostrar status de envio */}
+      {/* Status de envio */}
       {isSubmitting && (
         <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-6">
           Enviando resultados...
         </div>
       )}
 
-      {/* Mostrar confirmação de sucesso */}
-      {submitted && (
+      {/* Confirmação de sucesso */}
+      {submitted ? (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
           Resultados enviados com sucesso!
         </div>
-      )}
-
-      {/* Área para informações de debug - visível apenas em ambiente de desenvolvimento */}
-      {debugInfo && (
-        <div className="mt-4 p-4 bg-gray-100 rounded-lg text-left overflow-auto max-h-40 text-xs">
-          <p className="font-bold mb-2">Debug Info:</p>
-          <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+      ) : (
+        <div className="mb-6 space-y-2">
+          <p className="text-gray-600">
+            Se o envio automático falhar, tente um dos métodos alternativos:
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button 
+              onClick={sendViaGetRequest}
+              className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+              disabled={isSubmitting}
+            >
+              Enviar via GET
+            </button>
+            <button 
+              onClick={submitFormInNewTab}
+              className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+            >
+              Formulário (nova aba)
+            </button>
+            <button 
+              onClick={showIframeForm}
+              className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+            >
+              Método iframe
+            </button>
+          </div>
         </div>
       )}
+
+      {/* iFrame para envio direto - só é exibido quando necessário */}
+      {showIframe && (
+        <div className="mb-6">
+          <p className="text-sm text-gray-600 mb-2">
+            O iframe abaixo é um método para enviar seus dados contornando limitações de CORS.
+          </p>
+          <iframe 
+            src={`https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?name=${encodeURIComponent(userInfo.name)}&email=${encodeURIComponent(userInfo.email)}&resultType=${encodeURIComponent(result.type)}`}
+            style={{width: '100%', height: '60px', border: '1px solid #ddd', borderRadius: '4px'}}
+            onLoad={() => setSubmitted(true)}
+          />
+        </div>
+      )}
+
+      {/* Formulário oculto para método de nova aba */}
+      <form 
+        ref={formRef}
+        method="GET" 
+        action="https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774" 
+        target="_blank"
+        style={{display: 'none'}}
+      >
+        <input type="hidden" name="name" value={userInfo.name} />
+        <input type="hidden" name="email" value={userInfo.email} />
+        <input type="hidden" name="resultType" value={result.type} />
+        <input type="hidden" name="resultTitle" value={result.title} />
+        <input type="hidden" name="resultDescription" value={result.description} />
+      </form>
 
       <div className="space-y-4 mt-6">
         <a
