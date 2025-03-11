@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Result, UserInfo } from '../types';
 import { Heart, Star, Sparkles } from 'lucide-react';
 
@@ -17,67 +17,135 @@ const icons = {
 export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const Icon = icons[result.type];
   const [submitted, setSubmitted] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showIframe, setShowIframe] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
-  
-  // Função para enviar os dados via GET query params
-  const sendViaGetRequest = () => {
+  const [attemptCount, setAttemptCount] = useState(0);
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
+
+  // Função para adicionar informações de debug
+  const addDebugInfo = (info: string) => {
+    console.log(`[DEBUG] ${info}`);
+    setDebugInfo(prev => [...prev, info]);
+  };
+
+  // Função para criar um pixel de rastreamento garantido
+  const sendViaPixelTracking = () => {
     try {
-      setIsSubmitting(true);
+      addDebugInfo(`Tentativa ${attemptCount + 1}: Iniciando pixel tracking`);
       
-      // Construa as query params para o GET request
+      // Construir um objeto com todos os dados
+      const data = {
+        name: userInfo.name || 'sem_nome',
+        email: userInfo.email || 'sem_email',
+        resultType: result.type,
+        resultTitle: result.title,
+        resultDescription: result.description.substring(0, 100) // Truncando para evitar URLs muito longas
+      };
+      
+      addDebugInfo(`Dados para envio: ${JSON.stringify(data)}`);
+      
+      // Converter o objeto em uma string de consulta
+      const queryParams = Object.entries(data)
+        .map(([key, value]) => {
+          // Garantindo que não haja valores undefined/null e que todos sejam strings
+          const safeValue = value === undefined || value === null ? '' : String(value);
+          return `${encodeURIComponent(key)}=${encodeURIComponent(safeValue)}`;
+        })
+        .join('&');
+      
+      // Adicionar um timestamp para evitar cache
+      const timestamp = Date.now();
+      const fullUrl = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${queryParams}&_t=${timestamp}`;
+      
+      addDebugInfo(`URL completa: ${fullUrl.substring(0, 100)}...`);
+      
+      // Criar e inserir uma imagem de pixel de rastreamento
+      const img = new Image();
+      img.width = 1;
+      img.height = 1;
+      img.style.display = 'none';
+      
+      // Sucesso ao carregar a imagem
+      img.onload = () => {
+        addDebugInfo('Pixel carregado com sucesso!');
+        setSubmitted(true);
+        document.body.removeChild(img);
+      };
+      
+      // Falha ao carregar a imagem
+      img.onerror = () => {
+        // Mesmo com erro, consideramos enviado, pois a requisição foi feita
+        addDebugInfo('Erro ao carregar pixel, mas requisição foi enviada');
+        setSubmitted(true);
+        document.body.removeChild(img);
+      };
+      
+      // Definir o src e adicionar ao documento
+      img.src = fullUrl;
+      document.body.appendChild(img);
+      
+      // Incrementar o contador de tentativas
+      setAttemptCount(prev => prev + 1);
+    } catch (error) {
+      addDebugInfo(`Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
+  };
+
+  // Tenta alternativa com beacon API
+  const sendViaBeacon = () => {
+    try {
+      addDebugInfo('Tentando envio via Beacon API');
+      
+      const data = {
+        name: userInfo.name,
+        email: userInfo.email,
+        resultType: result.type,
+        resultTitle: result.title
+      };
+      
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const success = navigator.sendBeacon('https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774', blob);
+      
+      if (success) {
+        addDebugInfo('Beacon enviado com sucesso');
+        setSubmitted(true);
+      } else {
+        addDebugInfo('Falha ao enviar via Beacon');
+      }
+    } catch (error) {
+      addDebugInfo(`Erro no Beacon: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
+  };
+
+  // Tenta abrir o URL diretamente
+  const openUrlDirectly = () => {
+    try {
+      addDebugInfo('Tentando abrir URL diretamente');
+      
       const params = new URLSearchParams();
       params.append('name', userInfo.name);
       params.append('email', userInfo.email);
       params.append('resultType', result.type);
       params.append('resultTitle', result.title);
-      params.append('resultDescription', result.description);
       
-      // Construa a URL completa
-      const webhookUrl = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`;
+      const url = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`;
       
-      // Crie um elemento <img> invisível para fazer a requisição GET
-      const img = document.createElement('img');
-      img.style.display = 'none';
-      img.src = webhookUrl;
+      // Abre em uma nova aba
+      window.open(url, '_blank');
       
-      // Quando a imagem carregar ou falhar, consideramos enviado
-      img.onload = img.onerror = () => {
-        setSubmitted(true);
-        setIsSubmitting(false);
-        document.body.removeChild(img);
-      };
-      
-      document.body.appendChild(img);
+      setSubmitted(true);
+      addDebugInfo('URL aberta em nova aba');
     } catch (error) {
-      console.error("Erro no envio via GET:", error);
-      setIsSubmitting(false);
+      addDebugInfo(`Erro ao abrir URL: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     }
   };
 
-  // Função para mostrar o iframe que fará o envio via formulário
-  const showIframeForm = () => {
-    setShowIframe(true);
-  };
-
-  // Função para enviar via formulário oculto que abre em nova aba
-  const submitFormInNewTab = () => {
-    try {
-      if (formRef.current) {
-        formRef.current.submit();
-        setSubmitted(true);
-      }
-    } catch (error) {
-      console.error("Erro ao submeter formulário:", error);
-    }
-  };
-
-  // Tenta enviar automaticamente
+  // Tenta enviar automaticamente no carregamento
   useEffect(() => {
+    addDebugInfo('Componente Results montado');
+    addDebugInfo(`UserInfo: ${JSON.stringify(userInfo)}`);
+    
     const timer = setTimeout(() => {
       if (!submitted) {
-        sendViaGetRequest(); // Tenta primeiro o método GET
+        sendViaPixelTracking();
       }
     }, 1000);
     
@@ -101,13 +169,6 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         <p className="text-lg text-pink-800">{result.cta}</p>
       </div>
 
-      {/* Status de envio */}
-      {isSubmitting && (
-        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-6">
-          Enviando resultados...
-        </div>
-      )}
-
       {/* Confirmação de sucesso */}
       {submitted ? (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
@@ -116,60 +177,44 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       ) : (
         <div className="mb-6 space-y-2">
           <p className="text-gray-600">
-            Se o envio automático falhar, tente um dos métodos alternativos:
+            Escolha um método para enviar seus resultados:
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <button 
-              onClick={sendViaGetRequest}
+              onClick={sendViaPixelTracking}
               className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-              disabled={isSubmitting}
             >
-              Enviar via GET
+              Pixel Tracking
             </button>
             <button 
-              onClick={submitFormInNewTab}
+              onClick={sendViaBeacon}
               className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
             >
-              Formulário (nova aba)
+              Beacon API
             </button>
             <button 
-              onClick={showIframeForm}
+              onClick={openUrlDirectly}
               className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
             >
-              Método iframe
+              Abrir no Navegador
             </button>
           </div>
         </div>
       )}
 
-      {/* iFrame para envio direto - só é exibido quando necessário */}
-      {showIframe && (
-        <div className="mb-6">
-          <p className="text-sm text-gray-600 mb-2">
-            O iframe abaixo é um método para enviar seus dados contornando limitações de CORS.
-          </p>
-          <iframe 
-            src={`https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?name=${encodeURIComponent(userInfo.name)}&email=${encodeURIComponent(userInfo.email)}&resultType=${encodeURIComponent(result.type)}`}
-            style={{width: '100%', height: '60px', border: '1px solid #ddd', borderRadius: '4px'}}
-            onLoad={() => setSubmitted(true)}
-          />
+      {/* Área de debug */}
+      {debugInfo.length > 0 && (
+        <div className="mt-4 mb-6 p-3 bg-gray-50 border border-gray-200 rounded-lg text-left">
+          <p className="text-sm font-medium text-gray-700 mb-2">Logs de depuração:</p>
+          <div className="max-h-40 overflow-y-auto text-xs font-mono">
+            {debugInfo.map((log, index) => (
+              <div key={index} className="py-1 border-b border-gray-100 text-gray-600">
+                {log}
+              </div>
+            ))}
+          </div>
         </div>
       )}
-
-      {/* Formulário oculto para método de nova aba */}
-      <form 
-        ref={formRef}
-        method="GET" 
-        action="https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774" 
-        target="_blank"
-        style={{display: 'none'}}
-      >
-        <input type="hidden" name="name" value={userInfo.name} />
-        <input type="hidden" name="email" value={userInfo.email} />
-        <input type="hidden" name="resultType" value={result.type} />
-        <input type="hidden" name="resultTitle" value={result.title} />
-        <input type="hidden" name="resultDescription" value={result.description} />
-      </form>
 
       <div className="space-y-4 mt-6">
         <a
