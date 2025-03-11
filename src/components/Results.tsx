@@ -5,7 +5,7 @@ import { Heart, Star, Sparkles } from 'lucide-react';
 interface ResultsProps {
   result: Result;
   onRestart: () => void;
-  userInfo: UserInfo;
+  userInfo: UserInfo;  // userInfo inicial
 }
 
 const icons = {
@@ -15,7 +15,9 @@ const icons = {
 };
 
 export function Results({ result, onRestart, userInfo }: ResultsProps) {
-  const Icon = icons[result.type];
+  // Mantém localmente as infos de userInfo,
+  // para podermos sobrescrevê-las com as da URL, se existirem
+  const [localUserInfo, setLocalUserInfo] = useState<UserInfo>(userInfo);
   const [submitted, setSubmitted] = useState(false);
 
   // Mantenha os logs no console, mas não os exiba na UI
@@ -23,14 +25,33 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
     console.log(`[LOG] ${message}`);
   };
 
+  // Lê parâmetros da URL e, se existirem, sobrescreve o state local
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nomeParam = params.get('nome');
+    const emailParam = params.get('email');
+    const foneParam = params.get('fone');
+
+    addLog(`Parâmetros da URL - nome: ${nomeParam}, email: ${emailParam}, fone: ${foneParam}`);
+
+    // Atualiza localUserInfo apenas se o parâmetro existir
+    setLocalUserInfo((prev) => ({
+      ...prev,
+      name: nomeParam || prev.name,
+      email: emailParam || prev.email,
+      // Se você tiver um campo phone no seu UserInfo, pode sobrescrever aqui:
+      phone: foneParam || prev.phone,
+    }));
+  }, []);
+
   // Enviar dados via fetch/GET
-  const sendDataWithFetch = async () => {
+  const sendDataWithFetch = async (info: UserInfo) => {
     try {
       addLog('Tentando enviar dados via fetch/GET');
 
       const params = new URLSearchParams();
-      params.append('name', userInfo.name || 'sem_nome');
-      params.append('email', userInfo.email || 'sem_email');
+      params.append('name', info.name || 'sem_nome');
+      params.append('email', info.email || 'sem_email');
       params.append('resultType', result.type);
       params.append('resultTitle', result.title);
       params.append('method', 'fetch_get');
@@ -62,24 +83,14 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
     }
   };
 
-  // Ler parâmetros da URL e logar no console
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const nomeParam = params.get('nome');
-    const emailParam = params.get('email');
-    const foneParam = params.get('fone');
-    addLog(`Parâmetros da URL - nome: ${nomeParam}, email: ${emailParam}, fone: ${foneParam}`);
-    // Você pode atualizar o state ou sobrescrever userInfo aqui, se necessário.
-  }, []);
-
   // Tenta enviar automaticamente os dados
   useEffect(() => {
     const sendData = async () => {
       addLog('Iniciando envio automático de dados');
-      addLog(`UserInfo: ${JSON.stringify({ name: userInfo.name, email: userInfo.email })}`);
+      addLog(`UserInfo (local): ${JSON.stringify(localUserInfo)}`);
       addLog(`Result: ${JSON.stringify({ type: result.type, title: result.title })}`);
 
-      await sendDataWithFetch();
+      await sendDataWithFetch(localUserInfo);
     };
 
     const timer = setTimeout(() => {
@@ -89,7 +100,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [submitted, result, userInfo]);
+  }, [submitted, result, localUserInfo]);
 
   // Verificar se estamos retornando de um redirecionamento
   useEffect(() => {
@@ -100,15 +111,17 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
     }
   }, []);
 
+  const Icon = icons[result.type];
+
   return (
     <div className="max-w-2xl mx-auto p-8 bg-white rounded-lg shadow-lg text-center">
       <Icon className="w-16 h-16 text-pink-500 mx-auto mb-6" />
 
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-800 mb-2">
-          {userInfo.name}, {result.title.toLowerCase()}
+          {localUserInfo.name}, {result.title.toLowerCase()}
         </h2>
-        <p className="text-gray-500">{userInfo.email}</p>
+        <p className="text-gray-500">{localUserInfo.email}</p>
       </div>
 
       <p className="text-lg text-gray-600 mb-8">{result.description}</p>
