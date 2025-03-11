@@ -19,12 +19,11 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const [submitted, setSubmitted] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
   const [countdown, setCountdown] = useState(3);
-  const [debugInfo, setDebugInfo] = useState<string[]>([]);
-
-  // Função para adicionar logs
+  
+  // Mantenha os logs no console, mas não os exiba na UI
   const addLog = (message: string) => {
     console.log(`[LOG] ${message}`);
-    setDebugInfo(prev => [...prev, message]);
+    // Removido: setDebugInfo(prev => [...prev, message]);
   };
 
   // Função para criar um pixel de tracking
@@ -220,38 +219,19 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
                   onClick={trackWithPixel}
                   className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                 >
-                  Pixel Tracking
-                </button>
-                <button 
-                  onClick={() => window.open(`https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?name=${encodeURIComponent(userInfo.name)}&email=${encodeURIComponent(userInfo.email)}&result=${encodeURIComponent(result.type)}`, '_blank')}
-                  className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                >
-                  Abrir Webhook
+                  Enviar Resultados
                 </button>
                 <button 
                   onClick={redirectToWebhook}
                   className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
                 >
-                  Redirecionamento Garantido
+                  Envio Alternativo
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                O método de "Redirecionamento Garantido" irá te levar para outra página momentaneamente.
-              </p>
             </div>
           )}
 
-          {/* Debug logs */}
-          {debugInfo.length > 0 && (
-            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-md text-left">
-              <p className="text-xs font-semibold mb-1">Logs de depuração:</p>
-              <div className="max-h-32 overflow-y-auto text-xs font-mono">
-                {debugInfo.map((log, i) => (
-                  <div key={i} className="py-1 border-b border-gray-100 text-gray-600">{log}</div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Debug logs removidos */}
 
           <div className="space-y-4">
             <a
