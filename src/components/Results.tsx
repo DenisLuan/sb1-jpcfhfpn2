@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Result, UserInfo } from '../types';
 import { Heart, Star, Sparkles } from 'lucide-react';
 
@@ -16,42 +16,85 @@ const icons = {
 
 export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const Icon = icons[result.type];
-  const [submitted, setSubmitted] = React.useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // Console log para depuração
   useEffect(() => {
-    const sendResults = async () => {
-      try {
-        const data = {
-          name: userInfo.name,
-          email: userInfo.email,
-          result: {
-            type: result.type,
-            title: result.title,
-            description: result.description
-          }
-        };
+    console.log("Results component mounted with:", { userInfo, result });
+  }, []);
 
-        const response = await fetch('https://webhook.site/ec3d02de-4f8f-412a-a5c4-1fa6b5b71425', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(data)
-        });
+  // Função para enviar dados com botão manual, além do useEffect
+  const sendDataManually = async () => {
+    await sendResultsToWebhook();
+  };
 
-        if (response.ok) {
-          setSubmitted(true);
-          console.log('Results sent successfully');
+  // Função centralizada para enviar os dados
+  const sendResultsToWebhook = async () => {
+    if (isSubmitting || submitted) return;
+    
+    setIsSubmitting(true);
+    setError(null);
+    
+    try {
+      console.log("Preparing to send data:", { 
+        name: userInfo.name, 
+        email: userInfo.email,
+        resultType: result.type,
+        resultTitle: result.title
+      });
+      
+      const data = {
+        name: userInfo.name,
+        email: userInfo.email,
+        result: {
+          type: result.type,
+          title: result.title,
+          description: result.description
         }
-      } catch (error) {
-        console.error('Error sending results:', error);
+      };
+      
+      console.log("Sending data to webhook:", JSON.stringify(data));
+      
+      const response = await fetch('https://webhook.site/ec3d02de-4f8f-412a-a5c4-1fa6b5b71425', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        mode: 'cors',
+        body: JSON.stringify(data)
+      });
+      
+      console.log("Webhook response status:", response.status);
+      
+      if (response.ok) {
+        setSubmitted(true);
+        console.log('Results sent successfully');
+      } else {
+        const responseText = await response.text();
+        console.error('Error response:', responseText);
+        setError(`Erro ao enviar: ${response.status} ${responseText}`);
       }
-    };
-
-    if (!submitted) {
-      sendResults();
+    } catch (error) {
+      console.error('Error sending results:', error);
+      setError(`Erro de conexão: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [userInfo, result, submitted]);
+  };
+
+  // Enviar os dados automaticamente na montagem do componente
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!submitted && !isSubmitting) {
+        sendResultsToWebhook();
+      }
+    }, 1000); // Pequeno atraso para garantir que os valores estejam estáveis
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="max-w-2xl mx-auto p-8 bg-white rounded-lg shadow-lg text-center">
@@ -70,10 +113,24 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         <p className="text-lg text-pink-800">{result.cta}</p>
       </div>
 
-      {submitted && (
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+          {error}
+        </div>
+      )}
+
+      {submitted ? (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
           Resultados enviados com sucesso!
         </div>
+      ) : (
+        <button
+          onClick={sendDataManually}
+          disabled={isSubmitting}
+          className="block w-full mb-4 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200 disabled:bg-blue-300"
+        >
+          {isSubmitting ? "Enviando..." : "Enviar Resultados Manualmente"}
+        </button>
       )}
 
       <div className="space-y-4">
