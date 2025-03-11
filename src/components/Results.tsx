@@ -36,7 +36,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       params.append('method', 'fetch_get');
       params.append('timestamp', Date.now().toString());
       
-      const response = await fetch(`https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`, {
+      const response = await fetch(`https://endpoint-criss-production.up.railway.app/webhook?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Accept': '*/*'
