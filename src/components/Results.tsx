@@ -17,224 +17,263 @@ const icons = {
 export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const Icon = icons[result.type];
   const [submitted, setSubmitted] = useState(false);
-  const [attemptCount, setAttemptCount] = useState(0);
+  const [redirecting, setRedirecting] = useState(false);
+  const [countdown, setCountdown] = useState(3);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
-  // Função para adicionar informações de debug
-  const addDebugInfo = (info: string) => {
-    console.log(`[DEBUG] ${info}`);
-    setDebugInfo(prev => [...prev, info]);
+  // Função para adicionar logs
+  const addLog = (message: string) => {
+    console.log(`[LOG] ${message}`);
+    setDebugInfo(prev => [...prev, message]);
   };
 
-  // Função para criar um pixel de rastreamento garantido
-  const sendViaPixelTracking = () => {
+  // Função para criar um pixel de tracking
+  const trackWithPixel = () => {
     try {
-      addDebugInfo(`Tentativa ${attemptCount + 1}: Iniciando pixel tracking`);
+      addLog('Iniciando pixel tracking');
       
-      // Construir um objeto com todos os dados
-      const data = {
-        name: userInfo.name || 'sem_nome',
-        email: userInfo.email || 'sem_email',
-        resultType: result.type,
-        resultTitle: result.title,
-        resultDescription: result.description.substring(0, 100) // Truncando para evitar URLs muito longas
-      };
-      
-      addDebugInfo(`Dados para envio: ${JSON.stringify(data)}`);
-      
-      // Converter o objeto em uma string de consulta
-      const queryParams = Object.entries(data)
-        .map(([key, value]) => {
-          // Garantindo que não haja valores undefined/null e que todos sejam strings
-          const safeValue = value === undefined || value === null ? '' : String(value);
-          return `${encodeURIComponent(key)}=${encodeURIComponent(safeValue)}`;
-        })
-        .join('&');
-      
-      // Adicionar um timestamp para evitar cache
-      const timestamp = Date.now();
-      const fullUrl = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${queryParams}&_t=${timestamp}`;
-      
-      addDebugInfo(`URL completa: ${fullUrl.substring(0, 100)}...`);
-      
-      // Criar e inserir uma imagem de pixel de rastreamento
-      const img = new Image();
-      img.width = 1;
-      img.height = 1;
-      img.style.display = 'none';
-      
-      // Sucesso ao carregar a imagem
-      img.onload = () => {
-        addDebugInfo('Pixel carregado com sucesso!');
-        setSubmitted(true);
-        document.body.removeChild(img);
-      };
-      
-      // Falha ao carregar a imagem
-      img.onerror = () => {
-        // Mesmo com erro, consideramos enviado, pois a requisição foi feita
-        addDebugInfo('Erro ao carregar pixel, mas requisição foi enviada');
-        setSubmitted(true);
-        document.body.removeChild(img);
-      };
-      
-      // Definir o src e adicionar ao documento
-      img.src = fullUrl;
-      document.body.appendChild(img);
-      
-      // Incrementar o contador de tentativas
-      setAttemptCount(prev => prev + 1);
-    } catch (error) {
-      addDebugInfo(`Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-    }
-  };
-
-  // Tenta alternativa com beacon API
-  const sendViaBeacon = () => {
-    try {
-      addDebugInfo('Tentando envio via Beacon API');
-      
-      const data = {
-        name: userInfo.name,
-        email: userInfo.email,
-        resultType: result.type,
-        resultTitle: result.title
-      };
-      
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-      const success = navigator.sendBeacon('https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774', blob);
-      
-      if (success) {
-        addDebugInfo('Beacon enviado com sucesso');
-        setSubmitted(true);
-      } else {
-        addDebugInfo('Falha ao enviar via Beacon');
-      }
-    } catch (error) {
-      addDebugInfo(`Erro no Beacon: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-    }
-  };
-
-  // Tenta abrir o URL diretamente
-  const openUrlDirectly = () => {
-    try {
-      addDebugInfo('Tentando abrir URL diretamente');
-      
+      // Criando parâmetros para a URL
       const params = new URLSearchParams();
-      params.append('name', userInfo.name);
-      params.append('email', userInfo.email);
+      params.append('name', userInfo.name || 'sem_nome');
+      params.append('email', userInfo.email || 'sem_email');
       params.append('resultType', result.type);
       params.append('resultTitle', result.title);
+      params.append('method', 'pixel_tracking');
+      params.append('timestamp', Date.now().toString());
       
+      // URL completa
       const url = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`;
       
-      // Abre em uma nova aba
-      window.open(url, '_blank');
+      // Criar imagem
+      const img = new Image();
+      img.onload = () => {
+        addLog('Pixel carregado com sucesso');
+        document.body.removeChild(img);
+        setSubmitted(true);
+      };
+      img.onerror = () => {
+        addLog('Erro ao carregar pixel, mas requisição foi enviada');
+        document.body.removeChild(img);
+        setSubmitted(true);
+      };
       
-      setSubmitted(true);
-      addDebugInfo('URL aberta em nova aba');
+      img.src = url;
+      img.style.display = 'none';
+      document.body.appendChild(img);
     } catch (error) {
-      addDebugInfo(`Erro ao abrir URL: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      addLog(`Erro no pixel tracking: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
-  // Tenta enviar automaticamente no carregamento
-  useEffect(() => {
-    addDebugInfo('Componente Results montado');
-    addDebugInfo(`UserInfo: ${JSON.stringify(userInfo)}`);
+  // Função para redirecionamento temporário
+  const redirectToWebhook = () => {
+    setRedirecting(true);
     
+    // Iniciar countdown
+    const countdownInterval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+          
+          // Construir a URL com os parâmetros
+          const params = new URLSearchParams();
+          params.append('name', userInfo.name || 'sem_nome');
+          params.append('email', userInfo.email || 'sem_email');
+          params.append('resultType', result.type);
+          params.append('resultTitle', result.title);
+          params.append('description', result.description.substring(0, 100));
+          params.append('method', 'redirect');
+          params.append('timestamp', Date.now().toString());
+          
+          // URL de redirecionamento
+          const webhookUrl = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`;
+          
+          // URL de retorno (a mesma página atual)
+          const returnUrl = window.location.href;
+          
+          // Construir URL final com retorno automático
+          const finalUrl = `${webhookUrl}&returnUrl=${encodeURIComponent(returnUrl)}`;
+          
+          // Redirecionar para o webhook
+          window.location.href = finalUrl;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(countdownInterval);
+  };
+
+  // Enviar dados via fetch/GET - tentativa inicial
+  const sendDataWithFetch = async () => {
+    try {
+      addLog('Tentando enviar dados via fetch/GET');
+      
+      const params = new URLSearchParams();
+      params.append('name', userInfo.name || 'sem_nome');
+      params.append('email', userInfo.email || 'sem_email');
+      params.append('resultType', result.type);
+      params.append('resultTitle', result.title);
+      params.append('method', 'fetch_get');
+      params.append('timestamp', Date.now().toString());
+      
+      const response = await fetch(`https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Accept': '*/*'
+        }
+      });
+      
+      if (response.ok) {
+        addLog('Dados enviados com sucesso via fetch/GET');
+        setSubmitted(true);
+        return true;
+      } else {
+        addLog(`Erro no fetch/GET: ${response.status} ${response.statusText}`);
+        return false;
+      }
+    } catch (error) {
+      addLog(`Erro no fetch/GET: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  };
+
+  // Tenta enviar automaticamente
+  useEffect(() => {
+    const sendData = async () => {
+      addLog('Iniciando envio automático de dados');
+      addLog(`UserInfo: ${JSON.stringify({name: userInfo.name, email: userInfo.email})}`);
+      addLog(`Result: ${JSON.stringify({type: result.type, title: result.title})}`);
+      
+      // Tenta primeiro via fetch/GET
+      const fetchSuccess = await sendDataWithFetch();
+      
+      if (!fetchSuccess) {
+        // Se falhar, tenta com pixel tracking
+        addLog('Fetch falhou, tentando pixel tracking');
+        trackWithPixel();
+      }
+    };
+    
+    // Pequeno delay antes de enviar
     const timer = setTimeout(() => {
-      if (!submitted) {
-        sendViaPixelTracking();
+      if (!submitted && !redirecting) {
+        sendData();
       }
     }, 1000);
     
     return () => clearTimeout(timer);
   }, []);
 
+  // Verificar se estamos retornando de um redirecionamento
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('fromWebhook')) {
+      addLog('Retornando de redirecionamento para webhook');
+      setSubmitted(true);
+    }
+  }, []);
+
   return (
     <div className="max-w-2xl mx-auto p-8 bg-white rounded-lg shadow-lg text-center">
-      <Icon className="w-16 h-16 text-pink-500 mx-auto mb-6" />
-      
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">
-          {userInfo.name}, {result.title.toLowerCase()}
-        </h2>
-        <p className="text-gray-500">{userInfo.email}</p>
-      </div>
-      
-      <p className="text-lg text-gray-600 mb-8">{result.description}</p>
-      
-      <div className="bg-pink-50 p-6 rounded-lg mb-8">
-        <p className="text-lg text-pink-800">{result.cta}</p>
-      </div>
-
-      {/* Confirmação de sucesso */}
-      {submitted ? (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
-          Resultados enviados com sucesso!
+      {redirecting ? (
+        <div className="text-center py-10">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-bold mb-3">Redirecionando para enviado dos dados...</h2>
+          <p className="text-gray-600 mb-2">
+            Você será redirecionado em {countdown} segundo{countdown !== 1 ? 's' : ''}.
+          </p>
+          <p className="text-gray-500 text-sm">
+            Esta etapa é necessária para garantir que seus resultados sejam registrados corretamente.
+            Você retornará automaticamente a esta página em instantes.
+          </p>
         </div>
       ) : (
-        <div className="mb-6 space-y-2">
-          <p className="text-gray-600">
-            Escolha um método para enviar seus resultados:
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            <button 
-              onClick={sendViaPixelTracking}
-              className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-            >
-              Pixel Tracking
-            </button>
-            <button 
-              onClick={sendViaBeacon}
-              className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-            >
-              Beacon API
-            </button>
-            <button 
-              onClick={openUrlDirectly}
-              className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-            >
-              Abrir no Navegador
-            </button>
+        <>
+          <Icon className="w-16 h-16 text-pink-500 mx-auto mb-6" />
+          
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">
+              {userInfo.name}, {result.title.toLowerCase()}
+            </h2>
+            <p className="text-gray-500">{userInfo.email}</p>
           </div>
-        </div>
-      )}
+          
+          <p className="text-lg text-gray-600 mb-8">{result.description}</p>
+          
+          <div className="bg-pink-50 p-6 rounded-lg mb-8">
+            <p className="text-lg text-pink-800">{result.cta}</p>
+          </div>
 
-      {/* Área de debug */}
-      {debugInfo.length > 0 && (
-        <div className="mt-4 mb-6 p-3 bg-gray-50 border border-gray-200 rounded-lg text-left">
-          <p className="text-sm font-medium text-gray-700 mb-2">Logs de depuração:</p>
-          <div className="max-h-40 overflow-y-auto text-xs font-mono">
-            {debugInfo.map((log, index) => (
-              <div key={index} className="py-1 border-b border-gray-100 text-gray-600">
-                {log}
+          {/* Confirmação de sucesso */}
+          {submitted ? (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
+              Resultados enviados com sucesso!
+            </div>
+          ) : (
+            <div className="mb-6 space-y-3">
+              <p className="text-gray-600">
+                Se seu resultado não foi enviado automaticamente, escolha um método alternativo:
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <button 
+                  onClick={trackWithPixel}
+                  className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                >
+                  Pixel Tracking
+                </button>
+                <button 
+                  onClick={() => window.open(`https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?name=${encodeURIComponent(userInfo.name)}&email=${encodeURIComponent(userInfo.email)}&result=${encodeURIComponent(result.type)}`, '_blank')}
+                  className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                >
+                  Abrir Webhook
+                </button>
+                <button 
+                  onClick={redirectToWebhook}
+                  className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                >
+                  Redirecionamento Garantido
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              <p className="text-xs text-gray-500 mt-1">
+                O método de "Redirecionamento Garantido" irá te levar para outra página momentaneamente.
+              </p>
+            </div>
+          )}
 
-      <div className="space-y-4 mt-6">
-        <a
-          href="#"
-          className="block w-full bg-pink-600 text-white py-3 px-6 rounded-lg hover:bg-pink-700 transition duration-200"
-          onClick={(e) => {
-            e.preventDefault();
-            // Add your CTA link handling here
-          }}
-        >
-          Garantir Minha Vaga
-        </a>
-        
-        <button
-          onClick={onRestart}
-          className="block w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-200 transition duration-200"
-        >
-          Refazer o Teste
-        </button>
-      </div>
+          {/* Debug logs */}
+          {debugInfo.length > 0 && (
+            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-md text-left">
+              <p className="text-xs font-semibold mb-1">Logs de depuração:</p>
+              <div className="max-h-32 overflow-y-auto text-xs font-mono">
+                {debugInfo.map((log, i) => (
+                  <div key={i} className="py-1 border-b border-gray-100 text-gray-600">{log}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <a
+              href="#"
+              className="block w-full bg-pink-600 text-white py-3 px-6 rounded-lg hover:bg-pink-700 transition duration-200"
+              onClick={(e) => {
+                e.preventDefault();
+                // Add your CTA link handling here
+              }}
+            >
+              Garantir Minha Vaga
+            </a>
+            
+            <button
+              onClick={onRestart}
+              className="block w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-200 transition duration-200"
+            >
+              Refazer o Teste
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
