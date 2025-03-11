@@ -17,7 +17,7 @@ const icons = {
 export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const Icon = icons[result.type];
   const [submitted, setSubmitted] = useState(false);
-  
+
   // Mantenha os logs no console, mas não os exiba na UI
   const addLog = (message: string) => {
     console.log(`[LOG] ${message}`);
@@ -27,7 +27,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const sendDataWithFetch = async () => {
     try {
       addLog('Tentando enviar dados via fetch/GET');
-      
+
       const params = new URLSearchParams();
       params.append('name', userInfo.name || 'sem_nome');
       params.append('email', userInfo.email || 'sem_email');
@@ -35,53 +35,61 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       params.append('resultTitle', result.title);
       params.append('method', 'fetch_get');
       params.append('timestamp', Date.now().toString());
-      
-      const response = await fetch(`https://endpoint-criss-production.up.railway.app/webhook?${params.toString()}`, {
-        method: 'GET',
-        headers: {
-          'Accept': '*/*'
+
+      const response = await fetch(
+        `https://endpoint-criss-production.up.railway.app/webhook?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': '*/*'
+          }
         }
-      });
-      
+      );
+
       if (response.ok) {
         addLog('Dados enviados com sucesso via fetch/GET');
         setSubmitted(true);
         return true;
       } else {
         addLog(`Erro no fetch/GET: ${response.status} ${response.statusText}`);
-        // Mesmo com erro, marcamos como enviado para o usuário
         setSubmitted(true);
         return false;
       }
     } catch (error) {
       addLog(`Erro no fetch/GET: ${error instanceof Error ? error.message : String(error)}`);
-      // Mesmo com erro, marcamos como enviado para o usuário
       setSubmitted(true);
       return false;
     }
   };
 
-  // Tenta enviar automaticamente
+  // Ler parâmetros da URL e logar no console
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nomeParam = params.get('nome');
+    const emailParam = params.get('email');
+    const foneParam = params.get('fone');
+    addLog(`Parâmetros da URL - nome: ${nomeParam}, email: ${emailParam}, fone: ${foneParam}`);
+    // Você pode atualizar o state ou sobrescrever userInfo aqui, se necessário.
+  }, []);
+
+  // Tenta enviar automaticamente os dados
   useEffect(() => {
     const sendData = async () => {
       addLog('Iniciando envio automático de dados');
-      addLog(`UserInfo: ${JSON.stringify({name: userInfo.name, email: userInfo.email})}`);
-      addLog(`Result: ${JSON.stringify({type: result.type, title: result.title})}`);
-      
-      // Tentar enviar via fetch/GET
+      addLog(`UserInfo: ${JSON.stringify({ name: userInfo.name, email: userInfo.email })}`);
+      addLog(`Result: ${JSON.stringify({ type: result.type, title: result.title })}`);
+
       await sendDataWithFetch();
-      // Não fazemos nada especial em caso de falha, apenas logamos o erro
     };
-    
-    // Pequeno delay antes de enviar
+
     const timer = setTimeout(() => {
       if (!submitted) {
         sendData();
       }
     }, 1000);
-    
+
     return () => clearTimeout(timer);
-  }, []);
+  }, [submitted, result, userInfo]);
 
   // Verificar se estamos retornando de um redirecionamento
   useEffect(() => {
@@ -95,21 +103,19 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
   return (
     <div className="max-w-2xl mx-auto p-8 bg-white rounded-lg shadow-lg text-center">
       <Icon className="w-16 h-16 text-pink-500 mx-auto mb-6" />
-      
+
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-800 mb-2">
           {userInfo.name}, {result.title.toLowerCase()}
         </h2>
         <p className="text-gray-500">{userInfo.email}</p>
       </div>
-      
+
       <p className="text-lg text-gray-600 mb-8">{result.description}</p>
-      
+
       <div className="bg-pink-50 p-6 rounded-lg mb-8">
         <p className="text-lg text-pink-800">{result.cta}</p>
       </div>
-
-
 
       <div className="space-y-4">
         <a
@@ -117,12 +123,12 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
           className="block w-full bg-pink-600 text-white py-3 px-6 rounded-lg hover:bg-pink-700 transition duration-200"
           onClick={(e) => {
             e.preventDefault();
-            // Add your CTA link handling here
+            // Adicione aqui o tratamento do link CTA
           }}
         >
           Garantir Minha Vaga
         </a>
-        
+
         <button
           onClick={onRestart}
           className="block w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-200 transition duration-200"
