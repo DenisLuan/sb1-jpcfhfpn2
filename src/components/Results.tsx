@@ -15,23 +15,14 @@ const icons = {
   C: Heart,
 };
 
-// URL do webhook
-const WEBHOOK_URL = 'https://webhook.site/ec3d02de-4f8f-412a-a5c4-1fa6b5b71425';
-
 export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const Icon = icons[result.type];
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [logMessages, setLogMessages] = useState<string[]>([]);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
 
-  // Função para adicionar logs que serão visíveis no console E no componente
-  const addLog = (message: string) => {
-    console.log(`[WEBHOOK_LOG] ${message}`);
-    setLogMessages(prev => [...prev, message]);
-  };
-
-  // Função para enviar via axios com logs detalhados
+  // Função para enviar os dados através do proxy
   const sendResultsToWebhook = async () => {
     if (isSubmitting) return;
     
@@ -50,91 +41,104 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         }
       };
       
-      addLog(`Preparando envio de dados: ${JSON.stringify(payload)}`);
+      console.log("Payload para envio:", payload);
       
-      // Configurando Axios com timeout mais longo e headers completos
-      const axiosConfig = {
+      // Se estiver rodando no Railway, use a URL relativa para o proxy
+      // Nota: ajuste a URL abaixo conforme a configuração do seu servidor proxy
+      const proxyUrl = '/api/webhook';
+      
+      console.log(`Enviando para o proxy: ${proxyUrl}`);
+      
+      // Envio através do proxy
+      const response = await axios.post(proxyUrl, payload, {
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': 'axios/quiz-app'
-        },
-        timeout: 15000, // 15 segundos de timeout
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log("Resposta do proxy:", response.data);
+      
+      // Guardar informações de debug
+      setDebugInfo({
+        sentPayload: payload,
+        receivedResponse: response.data
+      });
+      
+      setSubmitted(true);
+    } catch (error: any) {
+      console.error("Erro ao enviar para o proxy:", error);
+      
+      // Informações detalhadas do erro para debug
+      const errorDetails = {
+        message: error.message
       };
       
-      addLog(`Enviando para ${WEBHOOK_URL} com config: ${JSON.stringify(axiosConfig)}`);
-      
-      // Tentando enviar com Axios
-      try {
-        const response = await axios.post(WEBHOOK_URL, payload, axiosConfig);
-        
-        addLog(`Resposta recebida: Status ${response.status}`);
-        addLog(`Headers de resposta: ${JSON.stringify(response.headers)}`);
-        
-        if (response.data) {
-          addLog(`Corpo da resposta: ${JSON.stringify(response.data)}`);
-        }
-        
-        if (response.status >= 200 && response.status < 300) {
-          setSubmitted(true);
-          addLog('Envio bem-sucedido!');
-        } else {
-          throw new Error(`Status inesperado: ${response.status}`);
-        }
-      } catch (axiosError: any) {
-        // Detalhando os erros do Axios
-        if (axiosError.response) {
-          // O servidor respondeu com um status fora do intervalo 2xx
-          addLog(`Erro de resposta: Status ${axiosError.response.status}`);
-          addLog(`Dados de erro: ${JSON.stringify(axiosError.response.data)}`);
-          setError(`Erro do servidor: ${axiosError.response.status}`);
-        } else if (axiosError.request) {
-          // A requisição foi feita mas não houve resposta
-          addLog('Nenhuma resposta recebida do servidor');
-          setError('O servidor não respondeu. Verifique sua conexão.');
-        } else {
-          // Erro ao configurar a requisição
-          addLog(`Erro de configuração: ${axiosError.message}`);
-          setError(`Erro ao preparar a requisição: ${axiosError.message}`);
-        }
-        
-        throw axiosError; // Re-throw para ser capturado pelo catch exterior
+      if (error.response) {
+        errorDetails.status = error.response.status;
+        errorDetails.data = error.response.data;
       }
-    } catch (error: any) {
-      console.error('Erro completo:', error);
-      addLog(`Erro geral: ${error.message}`);
+      
+      console.error("Detalhes do erro:", errorDetails);
+      setDebugInfo(errorDetails);
       
       // Mensagem amigável para o usuário
-      setError(`Falha ao enviar os resultados. ${error.message}`);
+      setError(`Erro ao enviar resultados. Por favor, tente novamente.`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Função para tentar novamente
-  const handleRetry = () => {
-    setLogMessages([]);
-    addLog('Tentando novamente...');
-    sendResultsToWebhook();
+  // Função para envio alternativo direto (sem proxy)
+  const sendDirectToWebhook = async () => {
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    setError(null);
+    
+    try {
+      const payload = {
+        name: userInfo.name,
+        email: userInfo.email,
+        result: {
+          type: result.type,
+          title: result.title,
+          description: result.description
+        }
+      };
+      
+      console.log("Tentando envio direto para o webhook...");
+      
+      const response = await axios.post(
+        'https://webhook.site/ec3d02de-4f8f-412a-a5c4-1fa6b5b71425', 
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        }
+      );
+      
+      console.log("Resposta do envio direto:", response);
+      setSubmitted(true);
+    } catch (error: any) {
+      console.error("Erro no envio direto:", error);
+      // Se falhar o envio direto, mostrar o erro mas não atualizar o estado de erro na interface
+      // para não confundir o usuário
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Enviar os dados quando o componente montar, com um atraso
+  // Enviar os dados quando o componente montar
   useEffect(() => {
-    addLog('Componente Results montado');
-    addLog(`UserInfo: ${JSON.stringify(userInfo)}`);
-    addLog(`Result: ${JSON.stringify(result)}`);
-    
     const timer = setTimeout(() => {
       if (!submitted) {
-        addLog('Iniciando envio automático após delay');
         sendResultsToWebhook();
       }
-    }, 1000); // Delay maior (1 segundo) para garantir que tudo está pronto
+    }, 1000);
     
-    return () => {
-      clearTimeout(timer);
-      addLog('Componente desmontado, timer limpo');
-    };
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -158,13 +162,22 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
           {error} 
-          <button 
-            onClick={handleRetry}
-            disabled={isSubmitting}
-            className="ml-2 underline"
-          >
-            Tentar novamente
-          </button>
+          <div className="mt-2 flex space-x-2">
+            <button 
+              onClick={() => sendResultsToWebhook()}
+              disabled={isSubmitting}
+              className="px-3 py-1 bg-red-100 rounded"
+            >
+              Tentar via proxy
+            </button>
+            <button 
+              onClick={() => sendDirectToWebhook()}
+              disabled={isSubmitting}
+              className="px-3 py-1 bg-red-100 rounded"
+            >
+              Tentar direto
+            </button>
+          </div>
         </div>
       )}
 
@@ -182,17 +195,11 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         </div>
       )}
 
-      {/* Área de logs (visível apenas em desenvolvimento) */}
-      {logMessages.length > 0 && (
-        <div className="mt-8 p-4 bg-gray-100 rounded-lg text-left">
-          <h3 className="font-bold mb-2">Logs de depuração:</h3>
-          <div className="max-h-40 overflow-y-auto text-xs font-mono">
-            {logMessages.map((log, index) => (
-              <div key={index} className="py-1 border-b border-gray-200">
-                {log}
-              </div>
-            ))}
-          </div>
+      {/* Área para informações de debug - visível apenas em ambiente de desenvolvimento */}
+      {debugInfo && (
+        <div className="mt-4 p-4 bg-gray-100 rounded-lg text-left overflow-auto max-h-40 text-xs">
+          <p className="font-bold mb-2">Debug Info:</p>
+          <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
         </div>
       )}
 
