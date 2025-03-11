@@ -20,31 +20,15 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Console log para depuração
-  useEffect(() => {
-    console.log("Results component mounted with:", { userInfo, result });
-  }, []);
-
-  // Função para enviar dados com botão manual, além do useEffect
-  const sendDataManually = async () => {
-    await sendResultsToWebhook();
-  };
-
   // Função centralizada para enviar os dados
   const sendResultsToWebhook = async () => {
-    if (isSubmitting || submitted) return;
+    if (isSubmitting) return;
     
     setIsSubmitting(true);
     setError(null);
     
     try {
-      console.log("Preparing to send data:", { 
-        name: userInfo.name, 
-        email: userInfo.email,
-        resultType: result.type,
-        resultTitle: result.title
-      });
-      
+      // Criando o objeto de dados - exatamente como você tinha
       const data = {
         name: userInfo.name,
         email: userInfo.email,
@@ -55,19 +39,22 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         }
       };
       
-      console.log("Sending data to webhook:", JSON.stringify(data));
+      // Log para depuração
+      console.log("Sending to webhook:", JSON.stringify(data));
       
+      // Modificações nas opções do fetch
       const response = await fetch('https://webhook.site/ec3d02de-4f8f-412a-a5c4-1fa6b5b71425', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Adicionando Accept header para melhorar compatibilidade
           'Accept': 'application/json'
         },
+        // Especificando o modo CORS explicitamente
         mode: 'cors',
+        // Garantindo que o corpo seja uma string JSON
         body: JSON.stringify(data)
       });
-      
-      console.log("Webhook response status:", response.status);
       
       if (response.ok) {
         setSubmitted(true);
@@ -75,7 +62,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       } else {
         const responseText = await response.text();
         console.error('Error response:', responseText);
-        setError(`Erro ao enviar: ${response.status} ${responseText}`);
+        setError(`Erro ao enviar: ${response.status}`);
       }
     } catch (error) {
       console.error('Error sending results:', error);
@@ -85,13 +72,14 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
     }
   };
 
-  // Enviar os dados automaticamente na montagem do componente
+  // Enviar os dados quando o componente montar
   useEffect(() => {
+    // Pequeno delay para garantir que tudo está pronto
     const timer = setTimeout(() => {
-      if (!submitted && !isSubmitting) {
+      if (!submitted) {
         sendResultsToWebhook();
       }
-    }, 1000); // Pequeno atraso para garantir que os valores estejam estáveis
+    }, 500);
     
     return () => clearTimeout(timer);
   }, []);
@@ -113,24 +101,32 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         <p className="text-lg text-pink-800">{result.cta}</p>
       </div>
 
+      {/* Mostrar erros se houver */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
+          {error} 
+          <button 
+            onClick={sendResultsToWebhook}
+            disabled={isSubmitting}
+            className="ml-2 underline"
+          >
+            Tentar novamente
+          </button>
         </div>
       )}
 
-      {submitted ? (
+      {/* Mostrar status de envio */}
+      {isSubmitting && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-6">
+          Enviando resultados...
+        </div>
+      )}
+
+      {/* Mostrar confirmação de sucesso */}
+      {submitted && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
           Resultados enviados com sucesso!
         </div>
-      ) : (
-        <button
-          onClick={sendDataManually}
-          disabled={isSubmitting}
-          className="block w-full mb-4 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200 disabled:bg-blue-300"
-        >
-          {isSubmitting ? "Enviando..." : "Enviar Resultados Manualmente"}
-        </button>
       )}
 
       <div className="space-y-4">
