@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Result, UserInfo } from '../types';
 import { Heart, Star, Sparkles } from 'lucide-react';
+import axios from 'axios';
 
 interface ResultsProps {
   result: Result;
@@ -20,7 +21,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Função centralizada para enviar os dados
+  // Função para enviar via axios
   const sendResultsToWebhook = async () => {
     if (isSubmitting) return;
     
@@ -28,7 +29,6 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
     setError(null);
     
     try {
-      // Criando o objeto de dados - exatamente como você tinha
       const data = {
         name: userInfo.name,
         email: userInfo.email,
@@ -39,37 +39,40 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         }
       };
       
-      // Log para depuração
-      console.log("Sending to webhook:", JSON.stringify(data));
+      console.log("Sending data to webhook:", data);
       
-      // Modificações nas opções do fetch
-      const response = await fetch('https://webhook.site/ec3d02de-4f8f-412a-a5c4-1fa6b5b71425', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Adicionando Accept header para melhorar compatibilidade
-          'Accept': 'application/json'
-        },
-        // Especificando o modo CORS explicitamente
-        mode: 'cors',
-        // Garantindo que o corpo seja uma string JSON
-        body: JSON.stringify(data)
-      });
+      // Usando axios em vez de fetch
+      const response = await axios.post(
+        'https://webhook.site/ec3d02de-4f8f-412a-a5c4-1fa6b5b71425', 
+        data, 
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        }
+      );
       
-      if (response.ok) {
+      console.log("Webhook response:", response);
+      
+      if (response.status >= 200 && response.status < 300) {
         setSubmitted(true);
         console.log('Results sent successfully');
       } else {
-        const responseText = await response.text();
-        console.error('Error response:', responseText);
         setError(`Erro ao enviar: ${response.status}`);
       }
     } catch (error) {
       console.error('Error sending results:', error);
-      setError(`Erro de conexão: ${error instanceof Error ? error.message : String(error)}`);
+      // Mensagem de erro mais amigável para o usuário
+      setError(`Erro de conexão. Por favor, verifique sua internet e tente novamente.`);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Tentar novamente quando o usuário clicar no botão
+  const handleRetry = () => {
+    sendResultsToWebhook();
   };
 
   // Enviar os dados quando o componente montar
@@ -106,7 +109,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
           {error} 
           <button 
-            onClick={sendResultsToWebhook}
+            onClick={handleRetry}
             disabled={isSubmitting}
             className="ml-2 underline"
           >
