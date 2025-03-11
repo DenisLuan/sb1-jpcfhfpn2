@@ -14,6 +14,12 @@ const icons = {
   C: Heart,
 };
 
+// URL do proxy - ajuste para sua URL real
+// Se estiver no mesmo domínio da sua aplicação, pode usar caminho relativo
+const PROXY_URL = '/proxy-webhook';
+// Ou para desenvolvimento local: const PROXY_URL = 'http://localhost:3000/proxy-webhook';
+// Ou para produção: const PROXY_URL = 'https://sua-api.com/proxy-webhook';
+
 export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const Icon = icons[result.type];
   const [submitted, setSubmitted] = useState(false);
@@ -23,7 +29,6 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
   // Mantenha os logs no console, mas não os exiba na UI
   const addLog = (message: string) => {
     console.log(`[LOG] ${message}`);
-    // Removido: setDebugInfo(prev => [...prev, message]);
   };
 
   // Função para criar um pixel de tracking
@@ -40,8 +45,8 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       params.append('method', 'pixel_tracking');
       params.append('timestamp', Date.now().toString());
       
-      // URL completa
-      const url = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`;
+      // URL completa usando o proxy
+      const url = `${PROXY_URL}?${params.toString()}`;
       
       // Criar imagem
       const img = new Image();
@@ -84,8 +89,8 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
           params.append('method', 'redirect');
           params.append('timestamp', Date.now().toString());
           
-          // URL de redirecionamento
-          const webhookUrl = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`;
+          // URL de redirecionamento usando o proxy
+          const webhookUrl = `${PROXY_URL}?${params.toString()}`;
           
           // URL de retorno (a mesma página atual)
           const returnUrl = window.location.href;
@@ -116,7 +121,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       params.append('method', 'fetch_get');
       params.append('timestamp', Date.now().toString());
       
-      const response = await fetch(`https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`, {
+      const response = await fetch(`${PROXY_URL}?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Accept': '*/*'
@@ -230,8 +235,6 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
               </div>
             </div>
           )}
-
-          {/* Debug logs removidos */}
 
           <div className="space-y-4">
             <a
