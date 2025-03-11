@@ -14,12 +14,6 @@ const icons = {
   C: Heart,
 };
 
-// URL do proxy - ajuste para sua URL real
-// Se estiver no mesmo domínio da sua aplicação, pode usar caminho relativo
-const PROXY_URL = '/proxy-webhook';
-// Ou para desenvolvimento local: const PROXY_URL = 'http://localhost:3000/proxy-webhook';
-// Ou para produção: const PROXY_URL = 'https://sua-api.com/proxy-webhook';
-
 export function Results({ result, onRestart, userInfo }: ResultsProps) {
   const Icon = icons[result.type];
   const [submitted, setSubmitted] = useState(false);
@@ -31,84 +25,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
     console.log(`[LOG] ${message}`);
   };
 
-  // Função para criar um pixel de tracking
-  const trackWithPixel = () => {
-    try {
-      addLog('Iniciando pixel tracking');
-      
-      // Criando parâmetros para a URL
-      const params = new URLSearchParams();
-      params.append('name', userInfo.name || 'sem_nome');
-      params.append('email', userInfo.email || 'sem_email');
-      params.append('resultType', result.type);
-      params.append('resultTitle', result.title);
-      params.append('method', 'pixel_tracking');
-      params.append('timestamp', Date.now().toString());
-      
-      // URL completa usando o proxy
-      const url = `${PROXY_URL}?${params.toString()}`;
-      
-      // Criar imagem
-      const img = new Image();
-      img.onload = () => {
-        addLog('Pixel carregado com sucesso');
-        document.body.removeChild(img);
-        setSubmitted(true);
-      };
-      img.onerror = () => {
-        addLog('Erro ao carregar pixel, mas requisição foi enviada');
-        document.body.removeChild(img);
-        setSubmitted(true);
-      };
-      
-      img.src = url;
-      img.style.display = 'none';
-      document.body.appendChild(img);
-    } catch (error) {
-      addLog(`Erro no pixel tracking: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
-  // Função para redirecionamento temporário
-  const redirectToWebhook = () => {
-    setRedirecting(true);
-    
-    // Iniciar countdown
-    const countdownInterval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(countdownInterval);
-          
-          // Construir a URL com os parâmetros
-          const params = new URLSearchParams();
-          params.append('name', userInfo.name || 'sem_nome');
-          params.append('email', userInfo.email || 'sem_email');
-          params.append('resultType', result.type);
-          params.append('resultTitle', result.title);
-          params.append('description', result.description.substring(0, 100));
-          params.append('method', 'redirect');
-          params.append('timestamp', Date.now().toString());
-          
-          // URL de redirecionamento usando o proxy
-          const webhookUrl = `${PROXY_URL}?${params.toString()}`;
-          
-          // URL de retorno (a mesma página atual)
-          const returnUrl = window.location.href;
-          
-          // Construir URL final com retorno automático
-          const finalUrl = `${webhookUrl}&returnUrl=${encodeURIComponent(returnUrl)}`;
-          
-          // Redirecionar para o webhook
-          window.location.href = finalUrl;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    
-    return () => clearInterval(countdownInterval);
-  };
-
-  // Enviar dados via fetch/GET - tentativa inicial
+  // Enviar dados via fetch/GET
   const sendDataWithFetch = async () => {
     try {
       addLog('Tentando enviar dados via fetch/GET');
@@ -121,7 +38,7 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       params.append('method', 'fetch_get');
       params.append('timestamp', Date.now().toString());
       
-      const response = await fetch(`${PROXY_URL}?${params.toString()}`, {
+      const response = await fetch(`https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Accept': '*/*'
@@ -142,6 +59,45 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
     }
   };
 
+  // Função para redirecionamento temporário (mantida como backup)
+  const redirectToWebhook = () => {
+    setRedirecting(true);
+    
+    // Iniciar countdown
+    const countdownInterval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+          
+          // Construir a URL com os parâmetros
+          const params = new URLSearchParams();
+          params.append('name', userInfo.name || 'sem_nome');
+          params.append('email', userInfo.email || 'sem_email');
+          params.append('resultType', result.type);
+          params.append('resultTitle', result.title);
+          params.append('description', result.description.substring(0, 100));
+          params.append('method', 'redirect');
+          params.append('timestamp', Date.now().toString());
+          
+          // URL de redirecionamento
+          const webhookUrl = `https://webhook.site/13769352-940d-4294-81b6-3506f9a3d774?${params.toString()}`;
+          
+          // URL de retorno (a mesma página atual)
+          const returnUrl = window.location.href;
+          
+          // Construir URL final com retorno automático
+          const finalUrl = `${webhookUrl}&returnUrl=${encodeURIComponent(returnUrl)}`;
+          
+          // Redirecionar para o webhook
+          window.location.href = finalUrl;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(countdownInterval);
+  };
+
   // Tenta enviar automaticamente
   useEffect(() => {
     const sendData = async () => {
@@ -149,13 +105,13 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       addLog(`UserInfo: ${JSON.stringify({name: userInfo.name, email: userInfo.email})}`);
       addLog(`Result: ${JSON.stringify({type: result.type, title: result.title})}`);
       
-      // Tenta primeiro via fetch/GET
+      // Tentar enviar via fetch/GET
       const fetchSuccess = await sendDataWithFetch();
       
+      // Se falhar, tenta com redirecionamento automaticamente
       if (!fetchSuccess) {
-        // Se falhar, tenta com pixel tracking
-        addLog('Fetch falhou, tentando pixel tracking');
-        trackWithPixel();
+        addLog('Fetch falhou, tentando redirecionamento');
+        redirectToWebhook();
       }
     };
     
@@ -183,12 +139,11 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
       {redirecting ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-bold mb-3">Redirecionando para enviado dos dados...</h2>
+          <h2 className="text-xl font-bold mb-3">Redirecionando...</h2>
           <p className="text-gray-600 mb-2">
             Você será redirecionado em {countdown} segundo{countdown !== 1 ? 's' : ''}.
           </p>
           <p className="text-gray-500 text-sm">
-            Esta etapa é necessária para garantir que seus resultados sejam registrados corretamente.
             Você retornará automaticamente a esta página em instantes.
           </p>
         </div>
@@ -210,29 +165,9 @@ export function Results({ result, onRestart, userInfo }: ResultsProps) {
           </div>
 
           {/* Confirmação de sucesso */}
-          {submitted ? (
+          {submitted && (
             <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
               Resultados enviados com sucesso!
-            </div>
-          ) : (
-            <div className="mb-6 space-y-3">
-              <p className="text-gray-600">
-                Se seu resultado não foi enviado automaticamente, escolha um método alternativo:
-              </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                <button 
-                  onClick={trackWithPixel}
-                  className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                >
-                  Enviar Resultados
-                </button>
-                <button 
-                  onClick={redirectToWebhook}
-                  className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                >
-                  Envio Alternativo
-                </button>
-              </div>
             </div>
           )}
 
