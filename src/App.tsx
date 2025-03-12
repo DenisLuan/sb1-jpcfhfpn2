@@ -16,13 +16,13 @@ function App() {
   };
 
   const handleQuizComplete = (answers: string[]) => {
-    // Calculate the most frequent answer
+    // Calcula a resposta mais frequente
     const counts = answers.reduce((acc, answer) => {
       acc[answer] = (acc[answer] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    const mostFrequent = Object.entries(counts).reduce((a, b) => 
+    const mostFrequent = Object.entries(counts).reduce((a, b) =>
       (counts[a[0]] > counts[b[0]] ? a : b)
     )[0] as keyof typeof results;
 
